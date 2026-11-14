@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nifty 500 breadth and relative strength</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
+<style>
+:root{--bg:#F2F4F7;--ink:#101828;--mute:#667085;--rule:#D8DDE5;--up:#12805C;--down:#C8372D;--accent:#2F4BDB;--zlo:rgba(200,55,45,.16);--zhi:rgba(218,150,20,.2);--hover:rgba(47,75,219,.07);color-scheme:light}
+@media (prefers-color-scheme:dark){:root{--bg:#0E1319;--ink:#E6EAF0;--mute:#8A94A4;--rule:#232B36;--up:#3CCB8E;--down:#F0645A;--accent:#7C93FF;--zlo:rgba(240,100,90,.2);--zhi:rgba(235,170,50,.2);--hover:rgba(124,147,255,.1);color-scheme:dark}}
+*{box-sizing:border-box}
+html{scroll-padding-top:12px}
+body{margin:0;background:var(--bg);color:var(--ink);font:400 15px/1.5 "Schibsted Grotesk",system-ui,sans-serif;font-variant-numeric:tabular-nums}
+main{max-width:1180px;margin:0 auto;padding:28px 20px 80px}
+h1{font-size:26px;line-height:1.2;margin:0 0 4px;font-weight:700}
+h2{font-size:18px;margin:0 0 14px;font-weight:700}
+.sub{color:var(--mute);margin:0}
+section{border-top:1px solid var(--rule);padding-top:22px;margin-top:34px}
+.gauges{display:grid;grid-template-columns:1fr 1fr;gap:28px 48px;margin-top:22px}
+.g-head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px}
+.g-head b{font-size:34px;line-height:1;font-weight:700}
+.track{position:relative;height:14px;border-radius:7px;background:linear-gradient(90deg,var(--zlo) 0 20%,var(--rule) 20% 80%,var(--zhi) 80% 100%)}
+.track i{position:absolute;top:-4px;width:4px;height:22px;margin-left:-2px;border-radius:2px;background:var(--ink)}
+.scale{display:flex;justify-content:space-between;color:var(--mute);font-size:12px;margin-top:4px}
+.facts{display:flex;flex-wrap:wrap;gap:8px 36px;margin-top:26px}
+.facts div{min-width:120px}.facts span{display:block;color:var(--mute);font-size:13px}.facts b{font-size:20px}
+.up{color:var(--up)}.down{color:var(--down)}
+.charts{display:grid;grid-template-columns:1fr 1fr;gap:28px}
+.charts h3,.detail h3{font-size:14px;margin:0 0 6px;font-weight:500;color:var(--mute)}
+.wide{grid-column:1/-1}
+.chart{height:260px}
+.controls{display:flex;flex-wrap:wrap;gap:14px 22px;align-items:end;margin-bottom:14px}
+label{display:flex;flex-direction:column;gap:3px;font-size:13px;color:var(--mute)}
+label.chk{flex-direction:row;align-items:center;gap:8px;padding-bottom:7px;color:var(--ink)}
+select,input[type=search],input[type=number]{font:inherit;color:var(--ink);background:transparent;border:1px solid var(--rule);border-radius:6px;padding:6px 8px;min-width:0}
+input[type=number]{width:84px}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.tablewrap{max-height:560px;overflow:auto;border-top:1px solid var(--rule)}
+table{border-collapse:collapse;width:100%;min-width:860px}
+th,td{padding:7px 10px;text-align:right;white-space:nowrap;border-bottom:1px solid var(--rule)}
+th:first-child,td:first-child,th:nth-child(2),td:nth-child(2){text-align:left}
+th{position:sticky;top:0;background:var(--bg);font-weight:500;color:var(--mute);cursor:pointer;user-select:none;font-size:13px}
+th.on{color:var(--ink)}
+th.on::after{content:attr(data-dir);margin-left:4px}
+tbody tr{cursor:pointer}tbody tr:hover,tbody tr.sel{background:var(--hover)}
+td.sym{font-weight:700}td.ind{color:var(--mute);max-width:200px;overflow:hidden;text-overflow:ellipsis}
+.rs{font-weight:700}
+.note{color:var(--mute);font-size:13px;margin-top:10px}
+.detail{display:none;margin-top:22px;grid-template-columns:1fr 1fr;gap:28px}
+.detail.show{display:grid}
+.detail .head{grid-column:1/-1;display:flex;justify-content:space-between;align-items:baseline}
+#err{display:none;border:1px solid var(--down);color:var(--down);padding:12px 14px;border-radius:6px;margin-top:20px}
+@media (max-width:760px){.gauges,.charts,.detail{grid-template-columns:1fr}.wide{grid-column:auto}}
+</style>
+</head>
+<body>
+<main>
+  <h1>Nifty 500 breadth and relative strength</h1>
+  <p class="sub" id="asof">Loading data…</p>
+  <div id="err"></div>
+
+  <div class="gauges">
+    <div><div class="g-head"><span>Stocks above 50-day average</span><b id="v50">–</b></div>
+      <div class="track"><i id="m50"></i></div><div class="scale"><span>0</span><span>20</span><span>80</span><span>100</span></div></div>
+    <div><div class="g-head"><span>Stocks above 200-day average</span><b id="v200">–</b></div>
+      <div class="track"><i id="m200"></i></div><div class="scale"><span>0</span><span>20</span><span>80</span><span>100</span></div></div>
+  </div>
+  <div class="facts" id="facts"></div>
+
+  <section>
+    <h2>Breadth over time</h2>
+    <div class="charts">
+      <div class="wide"><h3 id="t-ad">Advance/decline line and index</h3><div class="chart" id="c-ad"></div></div>
+      <div><h3>% of stocks above 50-day and 200-day averages</h3><div class="chart" id="c-pct"></div></div>
+      <div><h3>New 52-week highs (up) and lows (down)</h3><div class="chart" id="c-hl"></div></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Relative strength</h2>
+    <div class="controls">
+      <label>Benchmark<select id="bench"></select></label>
+      <label>Search<input type="search" id="q" placeholder="Symbol, name or industry"></label>
+      <label>Minimum RS rating<input type="number" id="min" min="1" max="99" value="1"></label>
+      <label class="chk"><input type="checkbox" id="hi"> RS line at 52-week high</label>
+    </div>
+    <div class="tablewrap"><table><thead id="thead"></thead><tbody id="tbody"></tbody></table></div>
+    <p class="note" id="count"></p>
+    <p class="note">RS rating ranks each stock against the other Nifty 500 stocks (1–99) using 12-month returns, weighting the latest 3 months double. Vs benchmark columns use the price ÷ benchmark ratio (the RS line): 3-month change, Mansfield (RS line vs its 52-week average, in %), and whether the line is at a 52-week high.</p>
+
+    <div class="detail" id="detail">
+      <div class="head"><h2 id="d-title"></h2><span class="sub" id="d-sub"></span></div>
+      <div><h3>Price and 50-day average</h3><div class="chart" id="c-px"></div></div>
+      <div><h3 id="t-rs">RS line</h3><div class="chart" id="c-rs"></div></div>
+    </div>
+  </section>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const mean = a => a.reduce((x, y) => x + y, 0) / a.length;
+const fmt = (v, d = 1) => v == null ? '–' : v.toFixed(d);
+const sgn = (v, d = 1) => v == null ? '–' : (v > 0 ? '+' : '') + v.toFixed(d);
+const cls = v => v == null ? '' : v > 0 ? 'up' : v < 0 ? 'down' : '';
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => location.reload());
+
+function chart(el) {
+  return LightweightCharts.createChart(el, {
+    autoSize: true,
+    layout: {background: {color: 'transparent'}, textColor: css('--mute'), fontFamily: 'Schibsted Grotesk, system-ui, sans-serif'},
+    grid: {vertLines: {visible: false}, horzLines: {color: css('--rule')}},
+    rightPriceScale: {borderVisible: false}, leftPriceScale: {borderVisible: false},
+    timeScale: {borderVisible: false}, crosshair: {mode: 0},
+  });
+}
+const series = (dates, vals) => dates.map((t, i) => ({time: t, value: vals[i]})).filter(p => p.value != null);
+
+let B, S, P, bench, sort = {k: 'rs', dir: -1}, selected = null, stats = new Map();
+
+async function load() {
+  try {
+    [B, S, P] = await Promise.all(['breadth', 'stocks', 'prices'].map(n =>
+      fetch(`data/${n}.json`, {cache: 'no-cache'}).then(r => { if (!r.ok) throw new Error(`${n}.json not found`); return r.json(); })));
+  } catch (e) {
+    const err = $('err');
+    err.style.display = 'block';
+    err.textContent = `${e.message}. Run the “Update market data” workflow in the Actions tab to generate the data files.`;
+    $('asof').textContent = 'No data yet';
+    return;
+  }
+  renderBreadth(); initTable(); renderTable();
+}
+
+function renderBreadth() {
+  const n = B.dates.length - 1, last = a => a[n], prev = a => a[n - 1];
+  $('asof').textContent = `As of ${B.asof} close · ${B.n} stocks · updated ${B.updated.replace('T', ' ')} UTC`;
+  for (const k of ['50', '200']) {
+    const v = last(B['p' + k]);
+    $('v' + k).textContent = v == null ? '–' : v.toFixed(0) + '%';
+    $('m' + k).style.left = (v ?? 0) + '%';
+  }
+  const f = (label, html) => `<div><span>${label}</span><b>${html}</b></div>`;
+  $('facts').innerHTML =
+    f('Advancing', `<span class="up">${last(B.adv)}</span>`) + f('Declining', `<span class="down">${last(B.dec)}</span>`) +
+    f('Advance/decline ratio', fmt(last(B.adv) / Math.max(1, last(B.dec)), 2)) +
+    f('New 52-week highs', `<span class="up">${last(B.nh) ?? '–'}</span>`) + f('New 52-week lows', `<span class="down">${last(B.nl) ?? '–'}</span>`);
+
+  $('t-ad').textContent = `Advance/decline line (right) and ${B.index_name} (left)`;
+  const c1 = chart($('c-ad'));
+  c1.addLineSeries({color: css('--mute'), lineWidth: 1, priceScaleId: 'left', priceLineVisible: false}).setData(series(B.dates, B.index));
+  c1.priceScale('left').applyOptions({visible: true});
+  c1.addLineSeries({color: css('--accent'), lineWidth: 2, priceLineVisible: false}).setData(series(B.dates, B.ad_line));
+  c1.timeScale().fitContent();
+
+  const c2 = chart($('c-pct'));
+  const l50 = c2.addLineSeries({color: css('--accent'), lineWidth: 2, priceLineVisible: false, title: '50d'});
+  const l200 = c2.addLineSeries({color: css('--mute'), lineWidth: 2, priceLineVisible: false, title: '200d'});
+  l50.setData(series(B.dates, B.p50)); l200.setData(series(B.dates, B.p200));
+  [20, 80].forEach(p => l50.createPriceLine({price: p, color: css('--rule'), lineWidth: 1, lineStyle: 2, axisLabelVisible: false}));
+  c2.priceScale('right').applyOptions({autoScale: false}); l50.applyOptions({autoscaleInfoProvider: () => ({priceRange: {minValue: 0, maxValue: 100}})});
+  c2.timeScale().fitContent();
+
+  const c3 = chart($('c-hl'));
+  c3.addHistogramSeries({color: css('--up'), priceLineVisible: false}).setData(series(B.dates, B.nh));
+  c3.addHistogramSeries({color: css('--down'), priceLineVisible: false}).setData(series(B.dates, B.nl.map(v => v == null ? null : -v)));
+  c3.timeScale().fitContent();
+}
+
+/* ---- relative strength vs chosen benchmark ---- */
+function rsLine(sym, b) {
+  const p = P.p[sym], x = P.idx[b];
+  return p.map((v, i) => v != null && x[i] != null ? v / x[i] : null);
+}
+function relStats(sym, b) {
+  const key = sym + '|' + b;
+  if (stats.has(key)) return stats.get(key);
+  const R = rsLine(sym, b), n = R.length, cur = R[n - 1];
+  let out = {rel3: null, mans: null, hi: null};
+  if (cur != null) {
+    const w = R.slice(-252).filter(v => v != null);
+    if (R[n - 64] != null) out.rel3 = (cur / R[n - 64] - 1) * 100;
+    if (w.length >= 200) { out.mans = (cur / mean(w) - 1) * 100; out.hi = cur >= Math.max(...w) ? 1 : 0; }
+  }
+  stats.set(key, out);
+  return out;
+}
+
+const COLS = [
+  ['s', 'Symbol'], ['i', 'Industry'], ['c', 'Close'], ['d1', '1D %'], ['rs', 'RS rating'], ['rs1w', 'RS 1W ago'], ['rs1m', 'RS 1M ago'],
+  ['rel3', 'vs bench 3M %'], ['mans', 'Mansfield'], ['hi', 'RS at high'], ['fh', 'From 52W high %'],
+];
+
+function initTable() {
+  const sel = $('bench');
+  Object.keys(P.idx).forEach(k => sel.add(new Option(k, k)));
+  bench = sel.value;
+  $('thead').innerHTML = '<tr>' + COLS.map(([k, l]) => `<th data-k="${k}" tabindex="0">${l}</th>`).join('') + '</tr>';
+  $('thead').addEventListener('click', e => {
+    const k = e.target.dataset.k; if (!k) return;
+    sort = {k, dir: sort.k === k ? -sort.dir : (k === 's' || k === 'i' ? 1 : -1)};
+    renderTable();
+  });
+  $('thead').addEventListener('keydown', e => { if (e.key === 'Enter') e.target.click(); });
+  sel.onchange = () => { bench = sel.value; renderTable(); if (selected) showDetail(selected); };
+  ['q', 'min', 'hi'].forEach(id => $(id).addEventListener('input', renderTable));
+  $('tbody').addEventListener('click', e => {
+    const tr = e.target.closest('tr'); if (tr) showDetail(tr.dataset.s);
+  });
+}
+
+function renderTable() {
+  const q = $('q').value.trim().toLowerCase(), min = +$('min').value || 1, onlyHi = $('hi').checked;
+  let rows = S.map(s => ({...s, ...relStats(s.s, bench)}))
+    .filter(r => (r.rs ?? 0) >= min && (!onlyHi || r.hi === 1) &&
+      (!q || (r.s + ' ' + r.n + ' ' + r.i).toLowerCase().includes(q)));
+  const {k, dir} = sort;
+  rows.sort((a, b) => {
+    const x = a[k], y = b[k];
+    if (x == null) return 1; if (y == null) return -1;
+    return (typeof x === 'string' ? x.localeCompare(y) : x - y) * dir;
+  });
+  document.querySelectorAll('#thead th').forEach(th => {
+    th.classList.toggle('on', th.dataset.k === k); th.dataset.dir = dir > 0 ? '▲' : '▼';
+  });
+  $('tbody').innerHTML = rows.map(r => `<tr data-s="${esc(r.s)}" class="${r.s === selected ? 'sel' : ''}">
+    <td class="sym" title="${esc(r.n)}">${esc(r.s)}</td><td class="ind">${esc(r.i)}</td>
+    <td>${fmt(r.c, 2)}</td><td class="${cls(r.d1)}">${sgn(r.d1, 2)}</td>
+    <td class="rs ${r.rs >= 80 ? 'up' : r.rs <= 30 ? 'down' : ''}">${fmt(r.rs, 0)}</td><td>${fmt(r.rs1w, 0)}</td><td>${fmt(r.rs1m, 0)}</td>
+    <td class="${cls(r.rel3)}">${sgn(r.rel3)}</td><td class="${cls(r.mans)}">${sgn(r.mans)}</td>
+    <td>${r.hi == null ? '–' : r.hi ? 'Yes' : 'No'}</td><td class="${cls(r.fh)}">${sgn(r.fh)}</td></tr>`).join('');
+  $('count').textContent = `${rows.length} of ${S.length} stocks shown`;
+}
+
+let detailCharts = [];
+function showDetail(sym) {
+  selected = sym;
+  const s = S.find(x => x.s === sym), p = P.p[sym];
+  detailCharts.forEach(c => c.remove()); detailCharts = [];
+  $('detail').classList.add('show');
+  $('d-title').textContent = `${s.s} · ${s.n}`;
+  $('d-sub').textContent = `${s.i} · RS rating ${fmt(s.rs, 0)}`;
+  $('t-rs').textContent = `RS line: ${s.s} ÷ ${bench}, with 50-day average`;
+  const sma = (a, n) => a.map((_, i) => {
+    const w = a.slice(Math.max(0, i - n + 1), i + 1);
+    return i >= n - 1 && w.every(v => v != null) ? mean(w) : null;
+  });
+  const mk = (el, line, avg) => {
+    const c = chart($(el)); detailCharts.push(c);
+    c.addLineSeries({color: css('--ink'), lineWidth: 2, priceLineVisible: false}).setData(series(P.dates, line));
+    c.addLineSeries({color: css('--accent'), lineWidth: 1, priceLineVisible: false}).setData(series(P.dates, avg));
+    c.timeScale().fitContent();
+  };
+  mk('c-px', p, sma(p, 50));
+  const R = rsLine(sym, bench);
+  mk('c-rs', R, sma(R, 50));
+  document.querySelectorAll('#tbody tr').forEach(tr => tr.classList.toggle('sel', tr.dataset.s === sym));
+  $('detail').scrollIntoView({behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'nearest'});
+}
+
+load();
+</script>
+</body>
+</html>
